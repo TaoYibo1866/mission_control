@@ -17,6 +17,7 @@ private:
   void cmdVelCb(const Twist cmd_vel);
   virtual bool executeSetup(const TriggerRequest& req);
   virtual bool preemptSetup(TriggerResponse& resp);
+  virtual void cleanUp();
 public:
   KeyboardControlActionServer();
   ~KeyboardControlActionServer(){};
@@ -44,9 +45,13 @@ bool KeyboardControlActionServer::executeSetup(const TriggerRequest&)
 bool KeyboardControlActionServer::preemptSetup(TriggerResponse &resp)
 {
   ROS_INFO("KEYBOARD CONTROL ACTION SERVER RECEIVE PREEMPT REQUEST!");
-  cmd_vel_sub_.shutdown();
   resp.message = "ATTEMPT CANCEL KEYBORAD CONTROL!";
   return true;
+}
+
+void KeyboardControlActionServer::cleanUp()
+{
+  cmd_vel_sub_.shutdown();
 }
 
 int main(int argc, char **argv)

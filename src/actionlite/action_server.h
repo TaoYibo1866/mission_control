@@ -41,6 +41,7 @@ protected:
   void setResponse(const Response& resp);
   virtual bool executeSetup(const Request& req);
   virtual bool preemptSetup(Response& resp);
+  virtual void cleanUp();
 public:
   ActionServer();
   virtual ~ActionServer();
@@ -105,6 +106,7 @@ bool ActionServer<Request, Response>::executeCb(Request &req, Response &resp)
     cv_.wait(lck);
     resp = resp_;
   }
+  cleanUp();
   return true;
 }
 
@@ -122,6 +124,9 @@ bool ActionServer<Request, Response>::executeSetup(const Request& req){};
 
 template <class Request, class Response>
 bool ActionServer<Request, Response>::preemptSetup(Response& resp){};
+
+template <class Request, class Response>
+void ActionServer<Request, Response>::cleanUp(){};
 
 }
 

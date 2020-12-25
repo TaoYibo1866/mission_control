@@ -1,0 +1,29 @@
+timeout_min: 10
+max_cnt: 3
+
+GO_HOME:
+  x: 9.0
+  y: 1.5
+  yaw_deg: 90
+  x_err_ss: 0.5
+  y_err_ss: 0.5
+  yaw_err_ss_deg: 1
+  timeout_s: 10
+
+RUSH_A:
+  x: 9.0
+  y: 9.5
+  yaw_deg: 90
+  x_err_ss: 0.5
+  y_err_ss: 0.5
+  yaw_err_ss_deg: 1
+  timeout_s: 5
+
+RUSH_B:
+  x: 2.0
+  y: 9.5
+  yaw_deg: 90
+  x_err_ss: 0.5
+  y_err_ss: 0.5
+  yaw_err_ss_deg: 1
+  timeout_s: 1

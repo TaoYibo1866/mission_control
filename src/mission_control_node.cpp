@@ -1,8 +1,15 @@
 #include <ros/ros.h>
 #include <std_srvs/Trigger.h>
+#include <mission_control/WaypointAction.h>
+#include <boost/circular_buffer.hpp>
 
 using std::vector;
 using std_srvs::Trigger;
+using mission_control::WaypointAction;
+
+int status;
+boost::circular_buffer<int> status_history(5);
+int cnt, max_cnt;
 
 class MissionStatus
 {
@@ -10,16 +17,34 @@ public:
   enum Status
   {
     MANUAL,
-    GO_HOME,
     RUSH_A,
     RUSH_B,
+    GO_HOME,
     RETRY
   };
 };
 
-int status = MissionStatus::MANUAL;
-vector<int> status_history(5);
+void setStatus(int new_status)
+{
+  status = new_status;
+  status_history.push_back(status);
+}
 
+WaypointAction generateWaypointAction(std::string name)
+{
+  ros::NodeHandle nh("~");
+  WaypointAction srv;
+  ROS_ASSERT(nh.getParam(name + "/x", srv.request.x));
+  ROS_ASSERT(nh.getParam(name + "/y", srv.request.y));
+  ROS_ASSERT(nh.getParam(name + "/yaw_deg", srv.request.yaw));
+  ROS_ASSERT(nh.getParam(name + "/x_err_ss", srv.request.x_err_ss));
+  ROS_ASSERT(nh.getParam(name + "/y_err_ss", srv.request.y_err_ss));
+  ROS_ASSERT(nh.getParam(name + "/yaw_err_ss_deg", srv.request.yaw_err_ss));
+  ROS_ASSERT(nh.getParam(name + "/timeout_s", srv.request.timeout_s));
+  srv.request.yaw *= M_PI / 180.0;
+  srv.request.yaw_err_ss *= M_PI / 180.0;
+  return srv;
+}
 void manual()
 {
   ROS_INFO("MISSION: MANUAL");
@@ -28,29 +53,100 @@ void manual()
   status = MissionStatus::GO_HOME;
 }
 
+void rushA()
+{
+  ROS_INFO("MISSION: RUSH_A");
+  WaypointAction srv = generateWaypointAction("RUSH_A");
+  ROS_ASSERT(ros::service::call("/waypoint/execute", srv));
+  if (srv.response.status == srv.response.SUCCEEDED)
+  {
+    setStatus(MissionStatus::RUSH_B);
+    return;
+  }
+  else if (srv.response.status == srv.response.PREEMPTED)
+  {
+    setStatus(MissionStatus::MANUAL);
+    return;
+  }
+  else
+  {
+    ROS_WARN("TIMEOUT!");
+    setStatus(MissionStatus::RETRY);
+    return;
+  }
+}
+
+void rushB()
+{
+  ROS_INFO("MISSION: RUSH_B");
+  WaypointAction srv = generateWaypointAction("RUSH_B");
+  ROS_ASSERT(ros::service::call("/waypoint/execute", srv));
+  if (srv.response.status == srv.response.SUCCEEDED)
+  {
+    if (++cnt >= max_cnt)
+    {
+      setStatus(MissionStatus::GO_HOME);
+      return;
+    }
+    setStatus(MissionStatus::RUSH_A);
+    return;
+  }
+  else if (srv.response.status == srv.response.PREEMPTED)
+  {
+    setStatus(MissionStatus::MANUAL);
+    return;
+  }
+  else
+  {
+    ROS_WARN("TIMEOUT!");
+    setStatus(MissionStatus::RETRY);
+    return;
+  }
+}
+
 void goHome()
 {
   ROS_INFO("MISSION: GO_HOME");
-  ros::Rate r(2);
-  r.sleep();
-  status = MissionStatus::MANUAL;
+  WaypointAction srv = generateWaypointAction("GO_HOME");
+  ROS_ASSERT(ros::service::call("/waypoint/execute", srv));
+  if (srv.response.status == srv.response.SUCCEEDED)
+  {
+    setStatus(MissionStatus::MANUAL);
+    return;
+  }
+  else if (srv.response.status == srv.response.PREEMPTED)
+  {
+    setStatus(MissionStatus::MANUAL);
+    return;
+  }
+  else
+  {
+    ROS_WARN("TIMEOUT!");
+    setStatus(MissionStatus::RETRY);
+    return;
+  }
 }
 
-void setStatus(int new_status)
+void retry()
 {
-  status = new_status;
-  for (int i = 0; i < status_history.size() - 1; i++)
-    status_history[i] = status_history[i] + 1;
-  status_history.back() = new_status;
+  ROS_INFO("MISSION: RETRY");
+  int len = status_history.size();
+  ROS_ASSERT(len > 1);
+  setStatus(status_history[len - 2]);
 }
 
 int main(int argc, char **argv)
 {
   ros::init(argc, argv, "mission_control");
-  ros::NodeHandle nh; // can't be omitted, must use this to start this node.
+  ros::NodeHandle nh("~"); // can't be omitted, must use this to start this node.
   ros::service::waitForService("/keyboard_control/execute");
+  ros::service::waitForService("/waypoint/execute");
   ros::AsyncSpinner spinner(1);
   spinner.start();
+  ros::Duration dur(1);
+  setStatus(MissionStatus::RUSH_A);
+  cnt = 0;
+  ROS_ASSERT(nh.getParam("max_cnt", max_cnt));
   while (ros::ok())
   {
     switch (status)
@@ -58,19 +154,23 @@ int main(int argc, char **argv)
     case MissionStatus::MANUAL:
       manual();
       break;
+    case MissionStatus::RUSH_A:
+      rushA();
+      break;
+    case MissionStatus::RUSH_B:
+      rushB();
+      break;
     case MissionStatus::GO_HOME:
       goHome();
       break;
-    case MissionStatus::RUSH_A:
-      break;
-    case MissionStatus::RUSH_B:
-      break;
     case MissionStatus::RETRY:
+      retry();
       break;
     default:
       ROS_ERROR("Status %d undefined! Should never reach this place!", status);
       break;
     }
+    dur.sleep(); //avoid ctrl-C stuck
   }
   return 0;
 }

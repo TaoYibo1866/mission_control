@@ -12,7 +12,6 @@ using mission_control::WaypointAction;
 int status;
 boost::circular_buffer<int> status_history(5);
 int cnt, max_cnt;
-float timeout_s;
 
 class MissionStatus
 {
@@ -169,6 +168,7 @@ int main(int argc, char **argv)
   ros::Duration dur(1);
   setStatus(MissionStatus::MANUAL);
   cnt = 0;
+  float timeout_s;
   ROS_ASSERT(nh.getParam("max_cnt", max_cnt));
   ROS_ASSERT(nh.getParam("timeout_s", timeout_s));
   ros::Timer timer;

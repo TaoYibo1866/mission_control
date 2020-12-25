@@ -1,4 +1,4 @@
-timeout_min: 10
+timeout_s: 15
 max_cnt: 3
 
 GO_HOME:

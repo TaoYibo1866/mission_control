@@ -1,15 +1,18 @@
 #include <ros/ros.h>
 #include <std_srvs/Trigger.h>
+#include <std_srvs/Empty.h>
 #include <mission_control/WaypointAction.h>
 #include <boost/circular_buffer.hpp>
 
 using std::vector;
 using std_srvs::Trigger;
+using std_srvs::Empty;
 using mission_control::WaypointAction;
 
 int status;
 boost::circular_buffer<int> status_history(5);
 int cnt, max_cnt;
+float timeout_s;
 
 class MissionStatus
 {
@@ -20,15 +23,10 @@ public:
     RUSH_A,
     RUSH_B,
     GO_HOME,
-    RETRY
+    RETRY,
+    TIMEOUT
   };
 };
-
-void setStatus(int new_status)
-{
-  status = new_status;
-  status_history.push_back(status);
-}
 
 WaypointAction generateWaypointAction(std::string name)
 {
@@ -45,12 +43,19 @@ WaypointAction generateWaypointAction(std::string name)
   srv.request.yaw_err_ss *= M_PI / 180.0;
   return srv;
 }
+
+void setStatus(int new_status)
+{
+  status = new_status;
+  status_history.push_back(status);
+}
+
 void manual()
 {
   ROS_INFO("MISSION: MANUAL");
   Trigger srv;
   ROS_ASSERT(ros::service::call("/keyboard_control/execute", srv));
-  status = MissionStatus::GO_HOME;
+  status = MissionStatus::RUSH_A;
 }
 
 void rushA()
@@ -65,12 +70,17 @@ void rushA()
   }
   else if (srv.response.status == srv.response.PREEMPTED)
   {
+    if (status == MissionStatus::TIMEOUT)
+    {
+      setStatus(MissionStatus::GO_HOME);
+      return;
+    }
     setStatus(MissionStatus::MANUAL);
     return;
   }
   else
   {
-    ROS_WARN("TIMEOUT!");
+    ROS_WARN("WAYPOINT TIMEOUT!");
     setStatus(MissionStatus::RETRY);
     return;
   }
@@ -93,12 +103,17 @@ void rushB()
   }
   else if (srv.response.status == srv.response.PREEMPTED)
   {
+    if (status == MissionStatus::TIMEOUT)
+    {
+      setStatus(MissionStatus::GO_HOME);
+      return;
+    }
     setStatus(MissionStatus::MANUAL);
     return;
   }
   else
   {
-    ROS_WARN("TIMEOUT!");
+    ROS_WARN("WAYPOINT TIMEOUT!");
     setStatus(MissionStatus::RETRY);
     return;
   }
@@ -121,7 +136,7 @@ void goHome()
   }
   else
   {
-    ROS_WARN("TIMEOUT!");
+    ROS_WARN("WAYPOINT TIMEOUT!");
     setStatus(MissionStatus::RETRY);
     return;
   }
@@ -135,6 +150,14 @@ void retry()
   setStatus(status_history[len - 2]);
 }
 
+void timerCb(const ros::TimerEvent&)
+{
+  ROS_WARN("MISSION TIMEOUT! GO HOME!");
+  setStatus(MissionStatus::TIMEOUT);
+  Empty srv;
+  ros::service::call("/waypoint/preempt", srv);
+}
+
 int main(int argc, char **argv)
 {
   ros::init(argc, argv, "mission_control");
@@ -144,15 +167,19 @@ int main(int argc, char **argv)
   ros::AsyncSpinner spinner(1);
   spinner.start();
   ros::Duration dur(1);
-  setStatus(MissionStatus::RUSH_A);
+  setStatus(MissionStatus::MANUAL);
   cnt = 0;
   ROS_ASSERT(nh.getParam("max_cnt", max_cnt));
+  ROS_ASSERT(nh.getParam("timeout_s", timeout_s));
+  ros::Timer timer;
   while (ros::ok())
   {
     switch (status)
     {
     case MissionStatus::MANUAL:
+      cnt = 0;
       manual();
+      timer = nh.createTimer(ros::Duration(timeout_s), timerCb, true);
       break;
     case MissionStatus::RUSH_A:
       rushA();

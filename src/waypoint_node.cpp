@@ -15,12 +15,13 @@ using mission_control::WaypointActionResponse;
 class WaypointActionServer: private actionlite::ActionServer<WaypointActionRequest, WaypointActionResponse>
 {
 private:
-  ros::Time start_ts;
   boost::circular_buffer<float> x_err_, y_err_, yaw_err_;
   ros::Publisher cmd_vel_pub_;
   ros::Subscriber pose_sub_;
+  ros::Timer timer_;
   bool checkErrSS(float x_err_ss, float y_err_ss, float yaw_err_ss);
   void poseCb(const Pose pose);
+  void timerCb(const ros::TimerEvent&);
   virtual bool executeSetup(const WaypointActionRequest& req);
   virtual bool preemptSetup(WaypointActionResponse& resp);
   virtual void cleanUp();
@@ -37,7 +38,6 @@ WaypointActionServer::WaypointActionServer(): x_err_(5), y_err_(5), yaw_err_(5)
 
 void WaypointActionServer::poseCb(const Pose pose)
 {
-  float duration_s = (ros::Time::now() - start_ts).toSec();
   WaypointActionRequest req = getRequest();
   float x_err = req.x - pose.x;
   float y_err = req.y - pose.y;
@@ -60,19 +60,7 @@ void WaypointActionServer::poseCb(const Pose pose)
     resp.x = pose.x;
     resp.y = pose.y;
     resp.yaw = pose.theta;
-    resp.duration_s = duration_s;
     resp.status = resp.SUCCEEDED;
-    setResponse(resp);
-    return;
-  }
-  if (duration_s > req.timeout_s)
-  {
-    WaypointActionResponse resp;
-    resp.x = pose.x;
-    resp.y = pose.y;
-    resp.yaw = pose.theta;
-    resp.duration_s = duration_s;
-    resp.status = resp.TIMEOUT;
     setResponse(resp);
     return;
   }
@@ -98,12 +86,12 @@ bool WaypointActionServer::checkErrSS(float x_err_ss, float y_err_ss, float yaw_
   return true;
 }
 
-bool WaypointActionServer::executeSetup(const WaypointActionRequest&)
+bool WaypointActionServer::executeSetup(const WaypointActionRequest& req)
 {
   ROS_INFO("WAYPOINT ACTION SERVER RECEIVE EXECUTE REQUEST!");
-  start_ts = ros::Time::now();
   ros::NodeHandle nh;
   pose_sub_ = nh.subscribe<Pose>("/turtle1/pose", 1, &WaypointActionServer::poseCb, this);
+  timer_ = nh.createTimer(ros::Duration(req.timeout_s), &WaypointActionServer::timerCb, this, true);
   return true;
 }
 
@@ -117,9 +105,18 @@ bool WaypointActionServer::preemptSetup(WaypointActionResponse &resp)
 void WaypointActionServer::cleanUp()
 {
   pose_sub_.shutdown();
+  timer_.stop();
   x_err_.clear();
   y_err_.clear();
   yaw_err_.clear();
+}
+
+void WaypointActionServer::timerCb(const ros::TimerEvent&)
+{
+  WaypointActionResponse resp;
+  resp.status = resp.TIMEOUT;
+  setResponse(resp);
+  return;
 }
 
 int main(int argc, char **argv)

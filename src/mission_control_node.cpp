@@ -1,7 +1,8 @@
 #include <ros/ros.h>
-#include <sensor_msgs/Joy.h>
+#include <std_srvs/Trigger.h>
 
 using std::vector;
+using std_srvs::Trigger;
 
 class MissionStatus
 {
@@ -29,6 +30,7 @@ int main(int argc, char **argv)
   ros::init(argc, argv, "mission_control");
   int status = MissionStatus::MANUAL;
   vector<int> status_history(5);
+  ros::ServiceClient keyboard_control_ac;
   while (ros::ok())
   {
     switch (status)

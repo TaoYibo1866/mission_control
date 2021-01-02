@@ -57,6 +57,7 @@ find_package(catkin REQUIRED COMPONENTS
 add_service_files(
   FILES
   WaypointAction.srv
+  SetUInt8.srv
 )
 
 ## Generate actions in the 'action' folder

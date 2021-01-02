@@ -1,17 +1,21 @@
 #include <ros/ros.h>
 #include <std_srvs/Trigger.h>
-#include <std_srvs/Empty.h>
+#include <std_msgs/UInt8.h>
 #include <mission_control/WaypointAction.h>
+#include <mission_control/SetUInt8.h>
 #include <boost/circular_buffer.hpp>
+#include <mutex>
 
 using std::vector;
 using std_srvs::Trigger;
-using std_srvs::Empty;
 using mission_control::WaypointAction;
+using mission_control::WaypointActionResponse;
+using mission_control::SetUInt8;
 
 int status;
 boost::circular_buffer<int> status_history(5);
 int cnt, max_cnt;
+std::mutex mtx;
 
 class MissionStatus
 {
@@ -22,8 +26,7 @@ public:
     RUSH_A,
     RUSH_B,
     GO_HOME,
-    RETRY,
-    TIMEOUT
+    RETRY
   };
 };
 
@@ -45,6 +48,7 @@ WaypointAction generateWaypointAction(std::string name)
 
 void setStatus(int new_status)
 {
+  std::unique_lock<std::mutex> lck(mtx);
   status = new_status;
   status_history.push_back(status);
 }
@@ -62,26 +66,21 @@ void rushA()
   ROS_INFO("MISSION: RUSH_A");
   WaypointAction srv = generateWaypointAction("RUSH_A");
   ROS_ASSERT(ros::service::call("/waypoint/execute", srv));
-  if (srv.response.status == srv.response.SUCCEEDED)
+  switch (srv.response.status)
   {
+  case WaypointActionResponse::SUCCEEDED:
     setStatus(MissionStatus::RUSH_B);
-    return;
-  }
-  else if (srv.response.status == srv.response.PREEMPTED)
-  {
-    if (status == MissionStatus::TIMEOUT)
-    {
-      setStatus(MissionStatus::GO_HOME);
-      return;
-    }
+    break;
+  case WaypointActionResponse::PREEMPTED_CTRL_C:
     setStatus(MissionStatus::MANUAL);
-    return;
-  }
-  else
-  {
+    break;
+  case WaypointActionResponse::PREEMPTED_TIMEOUT:
+    setStatus(MissionStatus::GO_HOME);
+    break;
+  case WaypointActionResponse::ABORTED_TIMEOUT:
     ROS_WARN("WAYPOINT TIMEOUT!");
     setStatus(MissionStatus::RETRY);
-    return;
+    break;
   }
 }
 
@@ -90,31 +89,24 @@ void rushB()
   ROS_INFO("MISSION: RUSH_B");
   WaypointAction srv = generateWaypointAction("RUSH_B");
   ROS_ASSERT(ros::service::call("/waypoint/execute", srv));
-  if (srv.response.status == srv.response.SUCCEEDED)
+  switch (srv.response.status)
   {
+  case WaypointActionResponse::SUCCEEDED:
     if (++cnt >= max_cnt)
-    {
       setStatus(MissionStatus::GO_HOME);
-      return;
-    }
-    setStatus(MissionStatus::RUSH_A);
-    return;
-  }
-  else if (srv.response.status == srv.response.PREEMPTED)
-  {
-    if (status == MissionStatus::TIMEOUT)
-    {
-      setStatus(MissionStatus::GO_HOME);
-      return;
-    }
+    else
+      setStatus(MissionStatus::RUSH_A);
+    break;
+  case WaypointActionResponse::PREEMPTED_CTRL_C:
     setStatus(MissionStatus::MANUAL);
-    return;
-  }
-  else
-  {
+    break;
+  case WaypointActionResponse::PREEMPTED_TIMEOUT:
+    setStatus(MissionStatus::GO_HOME);
+    break;
+  case WaypointActionResponse::ABORTED_TIMEOUT:
     ROS_WARN("WAYPOINT TIMEOUT!");
     setStatus(MissionStatus::RETRY);
-    return;
+    break;
   }
 }
 
@@ -123,21 +115,21 @@ void goHome()
   ROS_INFO("MISSION: GO_HOME");
   WaypointAction srv = generateWaypointAction("GO_HOME");
   ROS_ASSERT(ros::service::call("/waypoint/execute", srv));
-  if (srv.response.status == srv.response.SUCCEEDED)
+  switch (srv.response.status)
   {
+  case WaypointActionResponse::SUCCEEDED:
     setStatus(MissionStatus::MANUAL);
-    return;
-  }
-  else if (srv.response.status == srv.response.PREEMPTED)
-  {
+    break;
+  case WaypointActionResponse::PREEMPTED_CTRL_C:
     setStatus(MissionStatus::MANUAL);
-    return;
-  }
-  else
-  {
+    break;
+  case WaypointActionResponse::PREEMPTED_TIMEOUT:
+    setStatus(MissionStatus::MANUAL);
+    break;
+  case WaypointActionResponse::ABORTED_TIMEOUT:
     ROS_WARN("WAYPOINT TIMEOUT!");
     setStatus(MissionStatus::RETRY);
-    return;
+    break;
   }
 }
 
@@ -152,8 +144,8 @@ void retry()
 void timerCb(const ros::TimerEvent&)
 {
   ROS_WARN("MISSION TIMEOUT! GO HOME!");
-  setStatus(MissionStatus::TIMEOUT);
-  Empty srv;
+  SetUInt8 srv;
+  srv.request.data = WaypointActionResponse::PREEMPTED_TIMEOUT;
   ros::service::call("/waypoint/preempt", srv);
 }
 

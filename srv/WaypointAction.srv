@@ -13,6 +13,7 @@ float32 y
 float32 yaw
 # mission status
 uint8 status
-uint8 SUCCEEDED  = 0
-uint8 PREEMPTED  = 1
-uint8 TIMEOUT    = 2
+uint8 SUCCEEDED         = 0
+uint8 PREEMPTED_CTRL_C  = 1
+uint8 PREEMPTED_TIMEOUT = 2
+uint8 ABORTED_TIMEOUT   = 3

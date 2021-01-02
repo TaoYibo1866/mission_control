@@ -26,4 +26,4 @@ RUSH_B:
   x_err_ss: 0.5
   y_err_ss: 0.5
   yaw_err_ss_deg: 1
-  timeout_s: 1
+  timeout_s: 5

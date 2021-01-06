@@ -13,6 +13,6 @@ $ catkin_make
 ## 运行结果
 ```Bash
 $ roslaunch mission_control demo.launch
-$ rosservice call /keyboard_control/preempt "{}"
+$ rosservice call /keyboard_control/preempt "data: 0"
 ```
 ![image](https://gitee.com/harbin-institute-of-technology-csc/mission_control/raw/master/demo.png)

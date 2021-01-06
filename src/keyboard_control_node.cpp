@@ -1,26 +1,22 @@
 #include <ros/ros.h>
 #include <std_srvs/Trigger.h>
-#include <std_srvs/Empty.h>
 #include <geometry_msgs/Twist.h>
-#include "actionlite/action_server.h"
+#include <actionlite/action_server.h>
 #include <signal.h>
 
 using geometry_msgs::Twist;
 using std_srvs::Trigger;
 using std_srvs::TriggerRequest;
 using std_srvs::TriggerResponse;
-using std_srvs::Empty;
-using std_srvs::EmptyRequest;
-using std_srvs::EmptyResponse;
 
-class KeyboardControlActionServer: private actionlite::ActionServer<TriggerRequest, TriggerResponse, EmptyRequest, EmptyResponse>
+class KeyboardControlActionServer: private actionlite::ActionServer<TriggerRequest, TriggerResponse>
 {
 private:
   ros::Publisher cmd_vel_pub_;
   ros::Subscriber cmd_vel_sub_;
   void cmdVelCb(const Twist cmd_vel);
   virtual bool executeSetup(const TriggerRequest& req);
-  virtual bool preemptSetup(EmptyRequest&, EmptyResponse&, TriggerResponse& resp);
+  virtual bool preemptSetup(int status, TriggerResponse& resp);
   virtual void cleanUp();
 public:
   KeyboardControlActionServer();
@@ -46,7 +42,7 @@ bool KeyboardControlActionServer::executeSetup(const TriggerRequest&)
   return true;
 }
 
-bool KeyboardControlActionServer::preemptSetup(EmptyRequest&, EmptyResponse&, TriggerResponse& resp)
+bool KeyboardControlActionServer::preemptSetup(int, TriggerResponse& resp)
 {
   ROS_INFO("KEYBOARD CONTROL ACTION SERVER RECEIVE PREEMPT REQUEST!");
   resp.message = "ATTEMPT CANCEL KEYBORAD CONTROL!";
@@ -60,7 +56,7 @@ void KeyboardControlActionServer::cleanUp()
 
 void sigintHandler(int sig)
 {
-  Empty srv;
+  actionlite::SetUInt8 srv;
   ros::service::call("~preempt", srv);
   ros::shutdown();
 }

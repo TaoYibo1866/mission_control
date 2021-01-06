@@ -1,22 +1,19 @@
 #include <ros/ros.h>
 #include <geometry_msgs/Twist.h>
 #include <turtlesim/Pose.h>
-#include <mission_control/WaypointAction.h>
-#include <mission_control/SetUInt8.h>
+#include <actionlite/action_server.h>
+#include <actionlite/SetUInt8.h>
 #include <signal.h>
 #include <boost/circular_buffer.hpp>
 
-#include "actionlite/action_server.h"
+#include "mission_control/WaypointAction.h"
 
 using geometry_msgs::Twist;
 using turtlesim::Pose;
 using mission_control::WaypointActionRequest;
 using mission_control::WaypointActionResponse;
-using mission_control::SetUInt8;
-using mission_control::SetUInt8Request;
-using mission_control::SetUInt8Response;
 
-class WaypointActionServer: private actionlite::ActionServer<WaypointActionRequest, WaypointActionResponse, SetUInt8Request, SetUInt8Response>
+class WaypointActionServer: private actionlite::ActionServer<WaypointActionRequest, WaypointActionResponse>
 {
 private:
   boost::circular_buffer<float> x_err_, y_err_, yaw_err_;
@@ -27,7 +24,7 @@ private:
   void poseCb(const Pose pose);
   void timerCb(const ros::TimerEvent&);
   virtual bool executeSetup(const WaypointActionRequest& req);
-  virtual bool preemptSetup(SetUInt8Request& req, SetUInt8Response&, WaypointActionResponse& resp);
+  virtual bool preemptSetup(int status, WaypointActionResponse& resp);
   virtual void cleanUp();
 public:
   WaypointActionServer();
@@ -99,10 +96,10 @@ bool WaypointActionServer::executeSetup(const WaypointActionRequest& req)
   return true;
 }
 
-bool WaypointActionServer::preemptSetup(SetUInt8Request& req, SetUInt8Response&, WaypointActionResponse& resp)
+bool WaypointActionServer::preemptSetup(int status, WaypointActionResponse& resp)
 {
   ROS_INFO("WAYPOINT ACTION SERVER RECEIVE PREEMPT REQUEST!");
-  resp.status = req.data;
+  resp.status = status;
   return true;
 }
 
@@ -125,7 +122,7 @@ void WaypointActionServer::timerCb(const ros::TimerEvent&)
 
 void sigintHandler(int sig)
 {
-  SetUInt8 srv;
+  actionlite::SetUInt8 srv;
   srv.request.data = WaypointActionResponse::PREEMPTED_CTRL_C;
   ros::service::call("~preempt", srv);
   ros::shutdown();

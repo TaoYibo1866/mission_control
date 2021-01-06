@@ -51,10 +51,13 @@
   <buildtool_depend>catkin</buildtool_depend>
   <build_depend>roscpp</build_depend>
   <build_depend>turtlesim</build_depend>
+  <build_depend>actionlite</build_depend>
   <build_export_depend>roscpp</build_export_depend>
   <build_export_depend>turtlesim</build_export_depend>
+  <build_export_depend>actionlite</build_export_depend>
   <exec_depend>roscpp</exec_depend>
   <exec_depend>turtlesim</exec_depend>
+  <exec_depend>actionlite</exec_depend>
 
 
   <!-- The export tag contains other, unspecified, tags -->

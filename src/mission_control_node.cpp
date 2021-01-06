@@ -1,16 +1,15 @@
 #include <ros/ros.h>
 #include <std_srvs/Trigger.h>
-#include <std_msgs/UInt8.h>
-#include <mission_control/WaypointAction.h>
-#include <mission_control/SetUInt8.h>
+#include <actionlite/SetUInt8.h>
 #include <boost/circular_buffer.hpp>
 #include <mutex>
 
+#include "mission_control/WaypointAction.h"
+
 using std::vector;
 using std_srvs::Trigger;
+using actionlite::SetUInt8;
 using mission_control::WaypointAction;
-using mission_control::WaypointActionResponse;
-using mission_control::SetUInt8;
 
 int status;
 boost::circular_buffer<int> status_history(5);
@@ -26,7 +25,8 @@ public:
     RUSH_A,
     RUSH_B,
     GO_HOME,
-    RETRY
+    RETRY,
+    CANCEL
   };
 };
 
@@ -68,16 +68,16 @@ void rushA()
   ROS_ASSERT(ros::service::call("/waypoint/execute", srv));
   switch (srv.response.status)
   {
-  case WaypointActionResponse::SUCCEEDED:
+  case WaypointAction::Response::SUCCEEDED:
     setStatus(MissionStatus::RUSH_B);
     break;
-  case WaypointActionResponse::PREEMPTED_CTRL_C:
-    setStatus(MissionStatus::MANUAL);
+  case WaypointAction::Response::PREEMPTED_CTRL_C:
+    setStatus(MissionStatus::CANCEL);
     break;
-  case WaypointActionResponse::PREEMPTED_TIMEOUT:
+  case WaypointAction::Response::PREEMPTED_TIMEOUT:
     setStatus(MissionStatus::GO_HOME);
     break;
-  case WaypointActionResponse::ABORTED_TIMEOUT:
+  case WaypointAction::Response::ABORTED_TIMEOUT:
     ROS_WARN("WAYPOINT TIMEOUT!");
     setStatus(MissionStatus::RETRY);
     break;
@@ -91,19 +91,19 @@ void rushB()
   ROS_ASSERT(ros::service::call("/waypoint/execute", srv));
   switch (srv.response.status)
   {
-  case WaypointActionResponse::SUCCEEDED:
+  case WaypointAction::Response::SUCCEEDED:
     if (++cnt >= max_cnt)
       setStatus(MissionStatus::GO_HOME);
     else
       setStatus(MissionStatus::RUSH_A);
     break;
-  case WaypointActionResponse::PREEMPTED_CTRL_C:
-    setStatus(MissionStatus::MANUAL);
+  case WaypointAction::Response::PREEMPTED_CTRL_C:
+    setStatus(MissionStatus::CANCEL);
     break;
-  case WaypointActionResponse::PREEMPTED_TIMEOUT:
+  case WaypointAction::Response::PREEMPTED_TIMEOUT:
     setStatus(MissionStatus::GO_HOME);
     break;
-  case WaypointActionResponse::ABORTED_TIMEOUT:
+  case WaypointAction::Response::ABORTED_TIMEOUT:
     ROS_WARN("WAYPOINT TIMEOUT!");
     setStatus(MissionStatus::RETRY);
     break;
@@ -117,16 +117,16 @@ void goHome()
   ROS_ASSERT(ros::service::call("/waypoint/execute", srv));
   switch (srv.response.status)
   {
-  case WaypointActionResponse::SUCCEEDED:
+  case WaypointAction::Response::SUCCEEDED:
     setStatus(MissionStatus::MANUAL);
     break;
-  case WaypointActionResponse::PREEMPTED_CTRL_C:
+  case WaypointAction::Response::PREEMPTED_CTRL_C:
+    setStatus(MissionStatus::CANCEL);
+    break;
+  case WaypointAction::Response::PREEMPTED_TIMEOUT:
     setStatus(MissionStatus::MANUAL);
     break;
-  case WaypointActionResponse::PREEMPTED_TIMEOUT:
-    setStatus(MissionStatus::MANUAL);
-    break;
-  case WaypointActionResponse::ABORTED_TIMEOUT:
+  case WaypointAction::Response::ABORTED_TIMEOUT:
     ROS_WARN("WAYPOINT TIMEOUT!");
     setStatus(MissionStatus::RETRY);
     break;
@@ -145,7 +145,7 @@ void timerCb(const ros::TimerEvent&)
 {
   ROS_WARN("MISSION TIMEOUT! GO HOME!");
   SetUInt8 srv;
-  srv.request.data = WaypointActionResponse::PREEMPTED_TIMEOUT;
+  srv.request.data = WaypointAction::Response::PREEMPTED_TIMEOUT;
   ros::service::call("/waypoint/preempt", srv);
 }
 
@@ -157,7 +157,7 @@ int main(int argc, char **argv)
   ros::service::waitForService("/waypoint/execute");
   ros::AsyncSpinner spinner(1);
   spinner.start();
-  ros::Duration dur(1);
+  ros::Duration dur(0.1);
   setStatus(MissionStatus::MANUAL);
   cnt = 0;
   float timeout_s;
@@ -185,6 +185,8 @@ int main(int argc, char **argv)
     case MissionStatus::RETRY:
       retry();
       break;
+    case MissionStatus::CANCEL:
+      return 0;
     default:
       ROS_ERROR("Status %d undefined! Should never reach this place!", status);
       break;

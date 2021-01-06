@@ -1,10 +1,11 @@
-# ActionLite
+# ROS状态机
 
 ## 介绍
-轻量化ros::action，并基于此实现一个状态机例程
+基于actionlite实现的状态机例程
 ## 编译
 ```Bash
 $ cd ~/catkin_ws/src
+$ git clone https://gitee.com/harbin-institute-of-technology-csc/actionlite.git
 $ git clone https://gitee.com/harbin-institute-of-technology-csc/mission_control.git
 $ cd ~/catkin_ws
 $ catkin_make

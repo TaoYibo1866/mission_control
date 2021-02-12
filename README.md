@@ -15,4 +15,4 @@ $ catkin_make
 $ roslaunch mission_control demo.launch
 $ rosservice call /keyboard_control/preempt "data: 0"
 ```
-![image](https://gitee.com/harbin-institute-of-technology-csc/mission_control/raw/master/demo.png)
+![image](demo.png)
